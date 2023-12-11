@@ -7,7 +7,7 @@
     <!-- Comments -->
     <ul class="comment-list">
       @for (comment of comments; track comment.userID) {
-        <li class="comment-list-item" [innerHTML]="this.parseComment(comment.comment)">
+        <li class="comment-list-item" [innerHTML]="this.parseComment(comment)">
         </li>
       }
     </ul>

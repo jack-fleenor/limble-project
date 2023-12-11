@@ -17,12 +17,11 @@ type User = {
 type Comment = {
   userID: number;
   comment: string;
-  taggedUsers: Set<User>;
+  taggedUsers: Map<number, User>;
 };
 
 // Regular Expression Definitions to help with validation.
-const alphabetPattern: RegExp = /([A-Za-z])/g;
-const tagPattern: RegExp = /([ ]|)\@([A-Za-z])\w+/g;
+// const tagPattern: RegExp = new RegExp(/([ ]|)\@([A-Za-z])\w+/g);
 
 @Component({
   selector: 'app-root',
@@ -43,15 +42,17 @@ export class AppComponent {
     {
       userID: 0,
       comment: 'This is comment to @jeff, where I mention @BRYAN',
-      taggedUsers: new Set([
-        { userID: 2, name: 'Jeff' },
-        { userID: 3, name: 'Bryan' },
+      taggedUsers: new Map([
+        [2, { userID: 2, name: 'Jeff' }],
+        [3, { userID: 3, name: 'Bryan' }],
       ]),
     },
     {
       userID: 1,
       comment: 'This is tagging @Kevin',
-      taggedUsers: new Set([{ userID: 1, name: 'Kevin' }]),
+      taggedUsers: new Map([
+        [1, { userID: 1, name: 'Kevin' }]
+      ]),
     },
   ];
   // Writable Signals
@@ -61,12 +62,22 @@ export class AppComponent {
   comment: WritableSignal<Comment> = signal({
     userID: 0,
     comment: '',
-    taggedUsers: new Set(),
+    taggedUsers: new Map(),
   });
   // Computed Signals
   usersMatchingQuery: Signal<Array<User>> = computed(() =>
     this.users.filter((user) => this.isMatch(user, this.query()))
   );
+
+  // Utility Functions
+  showAlert(comment: string) {
+    const alert = document.getElementById('alert') as HTMLDivElement;
+    alert.innerText = comment;
+    alert.style.visibility = 'unset';
+    setTimeout(() => {
+      alert.style.visibility = 'hidden';
+    }, 2000);
+  }
 
   isMatch(user: User, query: string) {
     const formattedUser = user.name.normalize().toLowerCase();
@@ -74,6 +85,19 @@ export class AppComponent {
     return query !== ''
       ? formattedUser.slice(0, query.length) === formattedQuery
       : true;
+  }
+
+  // Input Functions
+  formatCommentInput(contentEditableElement: HTMLElement)
+  {
+    contentEditableElement.innerHTML = this.parseComment(this.comment())
+    const range = document.createRange() as Range;
+    const selection = window.getSelection() as Selection;
+    range.selectNodeContents(contentEditableElement);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    contentEditableElement.focus();
   }
 
   selectUser(e: Event) {
@@ -84,28 +108,20 @@ export class AppComponent {
     const input: HTMLElement = document.getElementById(
       'comment-input'
     ) as HTMLElement;
-    const trimmedCommentText: string = input.innerHTML.slice(
-      0,
-      this.comment().comment.length - this.query().length - 2
-    );
-    // Can't get inner text styling working right.
-    // const newCommentText: string = trimmedCommentText + '<b>@' + selectedUser.name + '</b>';
-    const newCommentText: string = trimmedCommentText + '@' + selectedUser.name;
-    input.innerHTML = newCommentText;
+    const commentQueryDifference: number = this.comment().comment.length - this.query().length - 1;
+    const trimmedCommentText: string = input.innerText.slice(0, commentQueryDifference);
+    const newCommentText: string = trimmedCommentText + '@' + selectedUser.name + '';
     const newComment: Comment = {
-      userID: this.comment().userID,
+      ...this.comment(),
       comment: newCommentText,
-      taggedUsers: this.comment().taggedUsers.add(selectedUser),
-    };
-    this.search.set(false);
-    this.comment.set(newComment);
+      taggedUsers: this.comment().taggedUsers.set(selectedUser.userID, selectedUser),
+    }
+    this.comment.update((comment) => comment = newComment);
+    this.formatCommentInput(input);
+    this.search.update((val) => !val);
   }
 
-  closeSearch() {
-    this.search.set(false);
-  }
-
-  handleInput(e: KeyboardEvent) {
+  handleInput(e: KeyboardEvent): void {
     // If user presses enter, submit comment
     if (e.code === 'Enter') {
       this.submitComment();
@@ -114,6 +130,7 @@ export class AppComponent {
     const target: HTMLElement = e.target as HTMLElement;
     const length: number = target.innerText.length;
     const input: string = target.innerText[length - 1];
+
     const validTag: boolean =
       input === '@' &&
       (length - 2 === -1 || target.innerText[length - 2] === ' ');
@@ -126,96 +143,71 @@ export class AppComponent {
       this.queryIndex.set(length - 1);
     } else if (validTagStart) {
       this.query.set(input.normalize().toLowerCase());
-    } else if (
-      this.query().length > 0 &&
-      alphabetPattern.test(input.normalize().toLowerCase())
-    ) {
-      const query: string = target.innerText
-        .slice(this.queryIndex() + 1, length)
-        .normalize()
-        .toLowerCase();
-      this.query.set(query);
+    } else if (this.query().length > 0) {
+      this.query.update((_query) => (_query = _query + input).normalize().toLowerCase());
     } else {
       this.search.set(false);
       this.query.set('');
-      this.queryIndex.set(0);
+      this.queryIndex.set(length - 1);
     }
-    this.comment.set({
-      userID: this.comment().userID,
-      comment: target.innerText + input,
-      taggedUsers: this.comment().taggedUsers,
+    // Update comment before formatting message
+    this.comment.update(prev => prev = {
+      ...prev,
+      comment: target.innerText,
     });
+    this.formatCommentInput(target);
   }
 
-  showAlert(comment: string) {
-    const alert = document.getElementById('alert') as HTMLDivElement;
-    alert.innerText = comment;
-    alert.style.visibility = 'unset';
-    setTimeout(() => {
-      alert.style.visibility = 'hidden';
-    }, 2000);
-  }
 
   submitComment() {
-    this.comment.set({
-      userID: this.comment().userID,
-      comment: this.comment().comment,
-      taggedUsers: this.comment().taggedUsers,
+    // Prune invalid tags.
+    this.comment.update(prev => prev = {
+      ...prev,
+      taggedUsers: this.validateTags(
+        this.comment().comment,
+        this.comment().taggedUsers
+      ),
     });
-
+    // Only post if comment is length > 0
     if (this.comment().comment.length > 0) {
+      // Only alert if users have been tagged.
       if (this.comment().taggedUsers.size > 0) {
-        let comment: string = '';
-        for (const tag of this.comment().taggedUsers) {
-          comment += tag.name + '\n';
+        let comment: string = 'Sending alerts to:\n';
+        for (const [id, user] of this.comment().taggedUsers) {
+          comment += user.name + '\n';
         }
         this.showAlert(comment);
       }
+      // Add to comments.
       this.comments.push(this.comment());
     }
+    // Reset inputs.
     (document.getElementById('comment-input') as HTMLDivElement).innerText = '';
     this.comment.set({
       userID: 0,
       comment: '',
-      taggedUsers: new Set(),
+      taggedUsers: new Map(),
     });
   }
 
-  getTags(message: string): Array<RegExpMatchArray> {
-    return [...message.matchAll(tagPattern)];
-  }
-
-  validateTags(
-    commentStr: string,
-    tags: Set<User>
-  ): { commentStr: string; tags: Set<User> } {
-    const filteredTags = new Set<User>();
-    const matchedTags = commentStr.match(tagPattern);
-
-    if (matchedTags) {
-      for (const tag of matchedTags) {
-        tags.forEach((_tag) => {
-          if (
-            _tag.name.normalize().toLowerCase() ===
-            tag.trim().slice(1, tag.length).normalize().toLowerCase()
-          ) {
-            filteredTags.add(_tag);
-          }
-        });
+  validateTags(comment: string, tags: Map<number, User>): Map<number, User> {
+    for(const [id, user] of tags){
+      if(!comment.match(new RegExp(`@${user.name}`, 'i'))){
+        tags.delete(id);
       }
     }
-    return {
-      commentStr: commentStr,
-      tags: filteredTags,
-    };
+    return tags;
   }
 
-  parseComment(comment: string): string {
-    const tags: RegExpMatchArray | null = comment.match(tagPattern);
+  parseComment(_comment: Comment): string {
+    const { comment, taggedUsers } = _comment;
     let parsed: string = comment;
-    if (tags) {
-      for (const tag of tags) {
-        parsed = parsed.replace(tag, `<b>${tag}</b>`);
+    for(const [ _, user] of taggedUsers){
+      const matches = comment.match(new RegExp(`@${user.name}`, 'i'));
+      if(matches){
+        matches.forEach((match) => {
+          parsed = parsed.replaceAll(match, `<b>@${user.name}</b>`)
+        })
       }
     }
     return parsed;
