@@ -1,0 +1,78 @@
+div {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+.comment-input {
+  height: 50px;
+  padding: 5px;
+  border: 2px solid lightgray;
+  border-radius: 5px;
+}
+.title {
+  font-weight: bold;
+  font-size: large;
+}
+.comment-input:empty:not(:focus):before{
+  content: attr(placeholder);
+  color: lightgray;
+  display: block;
+  position: absolute;    
+}
+.user-list {
+  z-index: 2;
+  position: absolute;
+  background-color: white;
+  padding: 5px;
+  bottom: 65px;
+  border: 2px solid lightgrey;
+  border-radius: 5px;
+  list-style-type: none;
+  width: 500px;
+}
+.user-list-item {
+  padding: 5px;
+}
+.user-list-item:hover{
+  background-color: aliceblue;
+}
+.comment-list {
+  list-style-type: none;
+  padding: 0;
+  width: 500px;
+}
+.comment-list-item {
+  border-bottom: 2px solid lightgray;
+  padding: 5px;
+  margin-bottom: 5px;
+}
+
+.comment-container {
+  padding: 15px;
+  border-radius: 5px;
+  width: 500px;
+  border: 2px solid lightgrey;
+  position: relative;
+  display: inline-block;
+}
+.alert {
+  z-index: 3;
+  visibility: hidden;
+  text-align: center;
+  justify-content: center;
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  padding: 5px;
+  height: 50px;
+  min-width: 250px;
+  max-width: fit-content;
+  background-color: white;
+  border: 2px solid lightgray;
+  border-radius: 15px;
+  position: absolute;
+}
+.container {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+}
